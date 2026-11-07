@@ -59,19 +59,37 @@ def run_code(file_path, input_data):
 
 
 def matches(output, expected):
-    for line in output:
-        if normalize(expected) in normalize(line):
+    """So khop output co bien, tranh loi substring (vi du 2 khong khop 12)."""
+    import re
+    target = str(expected).strip()
+    numeric = re.fullmatch(r"-?\d+(?:\.\d+)?", target) is not None
+    for raw_line in output:
+        line = raw_line.strip()
+        clean_line = " ".join(line.casefold().strip(" .;").split())
+        clean_target = " ".join(target.casefold().strip(" .;").split())
+        if clean_line == clean_target:
             return True
+        if numeric:
+            tail = re.split(r"[:=]", line)[-1].strip()
+            if re.fullmatch(re.escape(target) + r"[.,]?", tail):
+                return True
+            if re.fullmatch(re.escape(target) + r"[.,]?", line):
+                return True
+            # Cho phep so nam trong list/dict, nhung khong khop mot phan cua so khac.
+            if re.search(r"(?<![\w.])" + re.escape(target) + r"(?![\w.])", line):
+                return True
+        else:
+            if re.search(r"(?<!\w)" + re.escape(clean_target) + r"(?!\w)", clean_line):
+                return True
+        candidate = re.split(r"[:=]", line)[-1].strip()
         try:
-            actual = ast.literal_eval(line)
-            target = ast.literal_eval(expected) if isinstance(expected, str) else expected
-            if actual == target:
+            actual = ast.literal_eval(candidate)
+            wanted = ast.literal_eval(target)
+            if actual == wanted:
                 return True
         except (ValueError, SyntaxError, TypeError):
             pass
     return False
-
-
 def check_class(file_path):
     """Kiem tra class va ham __init__ bang AST, khong chi tim chuoi trong source."""
     try:
@@ -158,8 +176,15 @@ def grade(student_id="Chua nhap ten"):
         q_passed = 0
         for index, case in enumerate(cases, 1):
             output, error, return_code, elapsed, problem = run_code(file_path, case["input"])
-            expected_options = case["expected"]
-            ok = return_code == 0 and any(matches(output, expected) for expected in expected_options)
+            expected_options = case.get("expected", case.get("expected_all", []))
+            if "expected_all" in case:
+                ok = return_code == 0 and all(
+                    matches(output, item) for item in case["expected_all"]
+                )
+            else:
+                ok = return_code == 0 and any(
+                    matches(output, expected) for expected in expected_options
+                )
             completed_tests += 1
             if ok:
                 q_passed += 1
